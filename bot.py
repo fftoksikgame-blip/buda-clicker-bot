@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import json
+import sqlite3
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
@@ -106,7 +108,7 @@ async def cmd_top(message: types.Message):
         text = "🏆 **Топ тыкателей Буды:**\n\n"
         for i, (name, clicks, balance) in enumerate(top_users, 1):
             fatness = get_fatness_stage(clicks)
-            text += f"{i}. {name} — {clicks} тыков {fatness['emoji']}\n"
+            text += f"{i}. {name} — {clicks} тыков {fatness['emoji']} (💰 {balance})\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.callback_query(lambda c: c.data == "balance")
@@ -168,6 +170,49 @@ async def payment_handler(message: types.Message):
             "Все бонусы активированы. Иди тыкать Буду!",
             parse_mode="Markdown"
         )
+
+# ===== НОВЫЙ ОБРАБОТЧИК ДАННЫХ ИЗ MINI APP =====
+@dp.message(lambda message: message.web_app_data is not None)
+async def web_app_data_handler(message: types.Message):
+    user_id = message.from_user.id
+    data = json.loads(message.web_app_data.data)
+    action = data.get('action')
+    earned = data.get('earned', 0)
+    total_clicks = data.get('totalClicks')
+    balance = data.get('balance')
+
+    conn = sqlite3.connect('buda.db')
+    cur = conn.cursor()
+
+    if action == 'click':
+        # Увеличиваем total_clicks на 1, balance на earned
+        cur.execute('''
+            UPDATE users 
+            SET total_clicks = total_clicks + 1, balance = balance + ? 
+            WHERE user_id = ?
+        ''', (earned, user_id))
+        conn.commit()
+        await message.answer("✅ Клик засчитан!")  # опционально, можно убрать, чтобы не спамить
+
+    elif action == 'sync':
+        # Синхронизация: устанавливаем total_clicks и balance из игры
+        if total_clicks is not None and balance is not None:
+            cur.execute('''
+                UPDATE users 
+                SET total_clicks = ?, balance = ? 
+                WHERE user_id = ?
+            ''', (total_clicks, balance, user_id))
+            conn.commit()
+            await message.answer("🔄 Данные синхронизированы")
+
+    elif action == 'upgrade':
+        # При покупке улучшения просто обновляем баланс
+        if balance is not None:
+            cur.execute('UPDATE users SET balance = ? WHERE user_id = ?', (balance, user_id))
+            conn.commit()
+            # Можно также обновить click_power и т.д., но пока не нужно
+
+    conn.close()
 
 async def main():
     await dp.start_polling(bot)
