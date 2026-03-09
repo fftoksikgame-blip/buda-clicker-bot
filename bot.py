@@ -4,53 +4,44 @@ import json
 import sqlite3
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
 from database import init_db, get_user, update_user, add_purchase, get_top_users
 
-# ===== ТВОИ ДАННЫЕ =====
 BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"
 WEBAPP_URL = "https://fftoksikgame-blip.github.io/buda-clicker-app/"
 
-# ===== НАСТРОЙКИ =====
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Инициализация базы данных
 init_db()
 
 def get_fatness_stage(clicks):
     if clicks >= 1_000_000:
-        return {"name": "Буда-планета", "emoji": "🌍", "level": 7}
+        return {"name": "🌍 Буда-планета", "level": 7}
     elif clicks >= 500_000:
-        return {"name": "Буда-бочка", "emoji": "🛢️", "level": 6}
+        return {"name": "🛢️ Буда-бочка", "level": 6}
     elif clicks >= 100_000:
-        return {"name": "Буда-телепузик", "emoji": "🐷", "level": 5}
+        return {"name": "🐷 Буда-телепузик", "level": 5}
     elif clicks >= 10_000:
-        return {"name": "Буда-колобок", "emoji": "⚪", "level": 4}
+        return {"name": "⚪ Буда-колобок", "level": 4}
     elif clicks >= 1_000:
-        return {"name": "Буда-пухлик", "emoji": "🥟", "level": 3}
+        return {"name": "🥟 Буда-пухлик", "level": 3}
     elif clicks >= 100:
-        return {"name": "Буда-пончик", "emoji": "🍩", "level": 2}
+        return {"name": "🍩 Буда-пончик", "level": 2}
     else:
-        return {"name": "Буда-спичка", "emoji": "😤", "level": 1}
+        return {"name": "😤 Буда-спичка", "level": 1}
 
+# Главная клавиатура (ReplyKeyboardMarkup — для передачи данных!)
 def main_keyboard():
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(
-                text="🎮 ИГРАТЬ В БУДУ",
-                web_app=WebAppInfo(url=WEBAPP_URL)
-            )],
-            [
-                InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
-                InlineKeyboardButton(text="👥 Рефералы", callback_data="ref")
-            ],
-            [
-                InlineKeyboardButton(text="🏆 Топ", callback_data="top"),
-                InlineKeyboardButton(text="💎 Премиум", callback_data="premium")
-            ]
-        ]
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🎮 ИГРАТЬ В БУДУ", web_app=WebAppInfo(url=WEBAPP_URL))],
+            [KeyboardButton(text="💰 Баланс"), KeyboardButton(text="👥 Рефералы")],
+            [KeyboardButton(text="🏆 Топ"), KeyboardButton(text="💎 Премиум")]
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выбери действие..."
     )
     return keyboard
 
@@ -75,82 +66,65 @@ async def cmd_start(message: types.Message):
 
     await message.answer(
         f"🚀 **Привет, {first_name}!**\n\n"
-        f"Это кликер **толстого друга Буды**!\n"
-        f"Тыкай по нему, смотри как он толстеет и зарабатывай монеты.\n\n"
+        f"Это кликер **толстого друга Буды**!\n\n"
         f"📊 **Твоя статистика:**\n"
         f"💰 Баланс: {user['balance']} монет\n"
         f"👆 Кликов: {user['total_clicks']}\n"
-        f"🍔 Стадия Буды: {fatness['emoji']} {fatness['name']}\n"
-        f"👥 Рефералов: {user['referrals']}\n\n"
-        f"👇 **Жми кнопку ниже, чтобы начать тыкать Буду!**",
+        f"🍔 Стадия: {fatness['name']}\n"
+        f"👥 Рефералов: {user['referrals']}",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
 
-@dp.message(Command("balance"))
-async def cmd_balance(message: types.Message):
+@dp.message(lambda msg: msg.text == "💰 Баланс")
+async def handle_balance(message: types.Message):
     user = get_user(message.from_user.id)
     fatness = get_fatness_stage(user['total_clicks'])
     await message.answer(
         f"💰 **Твой баланс:** {user['balance']} монет\n"
-        f"👆 **Всего кликов:** {user['total_clicks']}\n"
-        f"🍔 **Буда сейчас:** {fatness['emoji']} {fatness['name']}\n"
-        f"⚡ **Энергия:** {user['energy']}/{user['max_energy']}",
+        f"👆 **Кликов:** {user['total_clicks']}\n"
+        f"🍔 **Буда:** {fatness['name']}",
         parse_mode="Markdown"
     )
 
-@dp.message(Command("top"))
-async def cmd_top(message: types.Message):
+@dp.message(lambda msg: msg.text == "👥 Рефералы")
+async def handle_ref(message: types.Message):
+    user_id = message.from_user.id
+    bot_username = (await bot.me()).username
+    ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+    await message.answer(
+        f"👥 **Реферальная система**\n\n"
+        f"• **100 монет** за друга\n"
+        f"• **10%** от их покупок\n\n"
+        f"👇 **Твоя ссылка:**\n"
+        f"`{ref_link}`",
+        parse_mode="Markdown"
+    )
+
+@dp.message(lambda msg: msg.text == "🏆 Топ")
+async def handle_top(message: types.Message):
     top_users = get_top_users(10)
     if not top_users:
         text = "🏆 Топ пока пуст. Тыкай Буду первым!"
     else:
-        text = "🏆 **Топ тыкателей Буды:**\n\n"
+        text = "🏆 **Топ тыкателей:**\n\n"
         for i, (name, clicks, balance) in enumerate(top_users, 1):
             fatness = get_fatness_stage(clicks)
-            text += f"{i}. {name} — {clicks} тыков {fatness['emoji']} (💰 {balance})\n"
+            text += f"{i}. {name} — {clicks} {fatness['name']} (💰 {balance})\n"
     await message.answer(text, parse_mode="Markdown")
 
-@dp.callback_query(lambda c: c.data == "balance")
-async def callback_balance(callback: types.CallbackQuery):
-    await cmd_balance(callback.message)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "ref")
-async def callback_ref(callback: types.CallbackQuery):
-    user_id = callback.from_user.id
-    bot_username = (await bot.me()).username
-    ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
-    await callback.message.answer(
-        f"👥 **Реферальная система**\n\n"
-        f"Приглашай друзей и получай:\n"
-        f"• **100 монет** за каждого друга\n"
-        f"• **10%** от их покупок (навсегда)\n\n"
-        f"👇 **Твоя ссылка:**\n"
-        f"`{ref_link}`\n\n"
-        f"Отправь её друзьям!",
-        parse_mode="Markdown"
-    )
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "top")
-async def callback_top(callback: types.CallbackQuery):
-    await cmd_top(callback.message)
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "premium")
-async def callback_premium(callback: types.CallbackQuery):
+@dp.message(lambda msg: msg.text == "💎 Премиум")
+async def handle_premium(message: types.Message):
     prices = [types.LabeledPrice(label="Премиум на месяц", amount=100)]
     await bot.send_invoice(
-        chat_id=callback.from_user.id,
+        chat_id=message.from_user.id,
         title="💎 Премиум Буда Кликер",
-        description="Премиум даёт:\n• x2 монет за клик\n• +50 энергии\n• Уникальные скины\n• Без рекламы",
+        description="Премиум: x2 монет, +50 энергии, скины, без рекламы",
         payload="premium_month",
         provider_token="",
         currency="XTR",
         prices=prices
     )
-    await callback.answer()
 
 @dp.pre_checkout_query()
 async def pre_checkout_handler(pre_checkout: types.PreCheckoutQuery):
@@ -166,12 +140,11 @@ async def payment_handler(message: types.Message):
         update_user(user_id, premium=True, premium_expire=expire_date)
         add_purchase(user_id, "premium_month", 100)
         await message.answer(
-            "💎 **Поздравляю! Ты теперь Премиум-тыкатель!**\n\n"
-            "Все бонусы активированы. Иди тыкать Буду!",
+            "💎 **Ты теперь Премиум-тыкатель!**",
             parse_mode="Markdown"
         )
 
-# ===== НОВЫЙ ОБРАБОТЧИК ДАННЫХ ИЗ MINI APP =====
+# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ MINI APP =====
 @dp.message(lambda message: message.web_app_data is not None)
 async def web_app_data_handler(message: types.Message):
     user_id = message.from_user.id
@@ -185,17 +158,14 @@ async def web_app_data_handler(message: types.Message):
     cur = conn.cursor()
 
     if action == 'click':
-        # Увеличиваем total_clicks на 1, balance на earned
         cur.execute('''
             UPDATE users 
             SET total_clicks = total_clicks + 1, balance = balance + ? 
             WHERE user_id = ?
         ''', (earned, user_id))
         conn.commit()
-        await message.answer("✅ Клик засчитан!")  # опционально, можно убрать, чтобы не спамить
 
     elif action == 'sync':
-        # Синхронизация: устанавливаем total_clicks и balance из игры
         if total_clicks is not None and balance is not None:
             cur.execute('''
                 UPDATE users 
@@ -203,14 +173,11 @@ async def web_app_data_handler(message: types.Message):
                 WHERE user_id = ?
             ''', (total_clicks, balance, user_id))
             conn.commit()
-            await message.answer("🔄 Данные синхронизированы")
 
     elif action == 'upgrade':
-        # При покупке улучшения просто обновляем баланс
         if balance is not None:
             cur.execute('UPDATE users SET balance = ? WHERE user_id = ?', (balance, user_id))
             conn.commit()
-            # Можно также обновить click_power и т.д., но пока не нужно
 
     conn.close()
 
