@@ -7,7 +7,7 @@ from database import init_db, get_user, update_user, add_purchase, get_top_users
 
 # ===== ТВОИ ДАННЫЕ =====
 BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"  # Токен от BotFather
-WEBAPP_URL = "http://localhost:5000"  # Для теста на компе
+WEBAPP_URL = "https://fftoksikgame-blip.github.io/buda-clicker-app/"
 # Когда зальёшь на сервер, замени на: "https://твой-сайт.ру"
 
 # ===== НАСТРОЙКИ =====
