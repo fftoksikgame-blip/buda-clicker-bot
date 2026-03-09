@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Буда Кликер</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 12px;
+        }
+        
+        .game-container {
+            max-width: 450px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 40px;
+            padding: 20px 16px 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        /* Статистика */
+        .stats-panel {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 30px;
+            padding: 18px;
+            margin-bottom: 20px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .balance {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 24px;
+            font-weight: 900;
+            background: rgba(255,255,255,0.2);
+            padding: 8px 20px;
+            border-radius: 40px;
+        }
+        
+        .balance-icon { font-size: 28px; }
+        
+        .energy {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.2);
+            padding: 8px 16px;
+            border-radius: 40px;
+        }
+        
+        .energy-bar {
+            width: 80px;
+            height: 10px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .energy-fill {
+            height: 100%;
+            background: #fff;
+            width: 100%;
+            border-radius: 10px;
+        }
+        
+        /* Буда */
+        .buda-section {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .buda-button {
+            width: 280px;
+            height: 280px;
+            margin: 0 auto;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ffd93e, #ff9f1a);
+            box-shadow: 0 20px 30px rgba(0,0,0,0.3), 
+                       inset 0 -10px 20px rgba(0,0,0,0.3),
+                       inset 0 10px 20px rgba(255,255,255,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.1s, width 0.3s, height 0.3s;
+            border: 6px solid #ffaa00;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .buda-button:active {
+            transform: scale(0.95);
+        }
+        
+        /* Размеры Буды в зависимости от стадии */
+        .buda-button.level-1 { width: 240px; height: 240px; }  /* спичка */
+        .buda-button.level-2 { width: 250px; height: 250px; }  /* пончик */
+        .buda-button.level-3 { width: 260px; height: 260px; }  /* пухлик */
+        .buda-button.level-4 { width: 270px; height: 270px; }  /* колобок */
+        .buda-button.level-5 { width: 280px; height: 280px; }  /* телепузик */
+        .buda-button.level-6 { width: 290px; height: 290px; }  /* бочка */
+        .buda-button.level-7 { width: 300px; height: 300px; }  /* планета */
+        
+        .buda-emoji {
+            font-size: 140px;
+            filter: drop-shadow(0 10px 10px rgba(0,0,0,0.3));
+            transition: font-size 0.3s;
+        }
+        
+        .level-1 .buda-emoji { font-size: 120px; }
+        .level-2 .buda-emoji { font-size: 130px; }
+        .level-3 .buda-emoji { font-size: 140px; }
+        .level-4 .buda-emoji { font-size: 150px; }
+        .level-5 .buda-emoji { font-size: 160px; }
+        .level-6 .buda-emoji { font-size: 170px; }
+        .level-7 .buda-emoji { font-size: 180px; }
+        
+        .fatness-name {
+            margin-top: 15px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            background: rgba(255,255,255,0.8);
+            display: inline-block;
+            padding: 8px 25px;
+            border-radius: 40px;
+        }
+        
+        .click-power {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #666;
+        }
+        
+        /* Улучшения */
+        .upgrades-section {
+            margin-top: 25px;
+        }
+        
+        .section-title {
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #333;
+        }
+        
+        .upgrades-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        
+        .upgrade-card {
+            background: white;
+            border-radius: 25px;
+            padding: 16px 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            border: 2px solid rgba(255,255,255,0.8);
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        
+        .upgrade-card:active {
+            transform: scale(0.97);
+        }
+        
+        .upgrade-card.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        
+        .upgrade-emoji { font-size: 36px; }
+        .upgrade-name { font-weight: 800; }
+        .upgrade-price {
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            color: white;
+            font-weight: bold;
+            padding: 5px 15px;
+            border-radius: 30px;
+            font-size: 14px;
+        }
+        
+        /* Рефералы */
+        .ref-section {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            border-radius: 20px;
+            padding: 15px;
+            margin-top: 20px;
+            color: white;
+        }
+        
+        .ref-link {
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+        
+        .copy-btn {
+            background: white;
+            border: none;
+            color: #333;
+            padding: 10px 20px;
+            border-radius: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .copy-btn:active { transform: scale(0.98); }
+        
+        /* Анимация тычка */
+        .click-effect {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: scale(0);
+            pointer-events: none;
+        }
+        
+        .click-effect.active {
+            animation: clickRipple 0.4s ease-out;
+        }
+        
+        @keyframes clickRipple {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="game-container">
+        <!-- Верхняя панель -->
+        <div class="stats-panel">
+            <div class="balance">
+                <span class="balance-icon">💰</span>
+                <span id="balanceDisplay">0</span>
+            </div>
+            <div class="energy">
+                <span>⚡</span>
+                <div class="energy-bar">
+                    <div class="energy-fill" id="energyFill" style="width: 100%"></div>
+                </div>
+                <span id="energyDisplay">100/100</span>
+            </div>
+        </div>
+        
+        <!-- Буда (кликабельный) -->
+        <div class="buda-section">
+            <div class="buda-button level-1" id="budaButton">
+                <div class="buda-emoji" id="budaEmoji">😤</div>
+                <div class="click-effect" id="clickEffect"></div>
+            </div>
+            <div class="fatness-name" id="fatnessName">Буда-спичка</div>
+            <div class="click-power" id="clickPowerDisplay">+1 за тычок</div>
+        </div>
+        
+        <!-- Улучшения -->
+        <div class="upgrades-section">
+            <div class="section-title">
+                <span>🔧</span> Прокачка Буды
+            </div>
+            <div class="upgrades-grid">
+                <div class="upgrade-card" onclick="buyUpgrade('power')">
+                    <div class="upgrade-emoji">💪</div>
+                    <div class="upgrade-name">Сила тычка</div>
+                    <div class="upgrade-price" id="powerCost">100 💰</div>
+                </div>
+                <div class="upgrade-card" onclick="buyUpgrade('energy')">
+                    <div class="upgrade-emoji">🔋</div>
+                    <div class="upgrade-name">Макс. энергия</div>
+                    <div class="upgrade-price" id="energyCost">200 💰</div>
+                </div>
+                <div class="upgrade-card" onclick="buyUpgrade('regen')">
+                    <div class="upgrade-emoji">⚡</div>
+                    <div class="upgrade-name">Регенерация</div>
+                    <div class="upgrade-price" id="regenCost">300 💰</div>
+                </div>
+                <div class="upgrade-card" onclick="buyUpgrade('crit')">
+                    <div class="upgrade-emoji">🎯</div>
+                    <div class="upgrade-name">Крит. шанс</div>
+                    <div class="upgrade-price" id="critCost">500 💰</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Реферальная секция -->
+        <div class="ref-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span><strong>👥 Рефералов: <span id="referralsCount">0</span></strong></span>
+                <span>+100 монет за друга</span>
+            </div>
+            <div class="ref-link" id="refLink">загрузка...</div>
+            <button class="copy-btn" onclick="copyRefLink()">📋 Копировать ссылку</button>
+        </div>
+    </div>
+    
+    <script>
+        // Telegram WebApp
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        
+        // Данные пользователя
+        let userData = {
+            balance: 0,
+            energy: 100,
+            maxEnergy: 100,
+            clickPower: 1,
+            totalClicks: 0,
+            premium: false,
+            critChance: 0,
+            energyRegen: 1,
+            referrals: 0
+        };
+        
+        // Стадии толстоты
+        const fatnessStages = [
+            { threshold: 0, name: "Буда-спичка", emoji: "😤", level: 1 },
+            { threshold: 100, name: "Буда-пончик", emoji: "🍩", level: 2 },
+            { threshold: 1000, name: "Буда-пухлик", emoji: "🥟", level: 3 },
+            { threshold: 10000, name: "Буда-колобок", emoji: "⚪", level: 4 },
+            { threshold: 100000, name: "Буда-телепузик", emoji: "🐷", level: 5 },
+            { threshold: 500000, name: "Буда-бочка", emoji: "🛢️", level: 6 },
+            { threshold: 1000000, name: "Буда-планета", emoji: "🌍", level: 7 }
+        ];
+        
+        // Загрузка данных
+        tg.CloudStorage.getItem('userData', (err, data) => {
+            if (data) {
+                try {
+                    userData = JSON.parse(data);
+                } catch (e) {}
+            }
+            updateDisplay();
+        });
+        
+        // Реферальная ссылка
+        const botUsername = 'budka_click_bot';
+        const userId = tg.initDataUnsafe.user?.id || 0;
+        userData.refLink = `https://t.me/${botUsername}?start=ref_${userId}`;
+        document.getElementById('refLink').textContent = userData.refLink;
+        
+        // Получаем стадию толстоты по кликам
+        function getFatnessStage(clicks) {
+            for (let i = fatnessStages.length - 1; i >= 0; i--) {
+                if (clicks >= fatnessStages[i].threshold) {
+                    return fatnessStages[i];
+                }
+            }
+            return fatnessStages[0];
+        }
+        
+        // Обновление интерфейса
+        function updateDisplay() {
+            document.getElementById('balanceDisplay').textContent = userData.balance;
+            document.getElementById('energyDisplay').textContent = `${userData.energy}/${userData.maxEnergy}`;
+            document.getElementById('energyFill').style.width = `${(userData.energy / userData.maxEnergy) * 100}%`;
+            
+            // Стадия толстоты
+            const stage = getFatnessStage(userData.totalClicks);
+            document.getElementById('budaEmoji').textContent = stage.emoji;
+            document.getElementById('fatnessName').textContent = stage.name;
+            
+            // Меняем класс для размера
+            const budaButton = document.getElementById('budaButton');
+            budaButton.className = `buda-button level-${stage.level}`;
+            
+            // Сила клика
+            let powerText = `+${userData.clickPower} за тычок`;
+            if (userData.premium) powerText += ' (x2 премиум)';
+            if (userData.critChance > 0) powerText += `, крит ${userData.critChance}% x3`;
+            document.getElementById('clickPowerDisplay').textContent = powerText;
+            
+            // Цены улучшений
+            document.getElementById('powerCost').textContent = `${100 * userData.clickPower} 💰`;
+            
+            // Сохраняем
+            tg.CloudStorage.setItem('userData', JSON.stringify(userData));
+        }
+        
+        // Клик по Буде
+        document.getElementById('budaButton').addEventListener('click', (e) => {
+            if (userData.energy <= 0) {
+                tg.HapticFeedback?.notificationOccurred('error');
+                tg.showPopup({
+                    title: '😴 Буда устал',
+                    message: 'Подожди, пока восстановится энергия!',
+                    buttons: [{ type: 'ok' }]
+                });
+                return;
+            }
+            
+            // Анимация
+            const button = e.currentTarget;
+            button.style.transform = 'scale(0.95)';
+            setTimeout(() => button.style.transform = 'scale(1)', 100);
+            
+            // Эффект тычка
+            const rect = button.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const effect = document.getElementById('clickEffect');
+            effect.style.left = x - 30 + 'px';
+            effect.style.top = y - 30 + 'px';
+            effect.classList.add('active');
+            setTimeout(() => effect.classList.remove('active'), 400);
+            
+            // Вибрация
+            tg.HapticFeedback?.impactOccurred('medium');
+            
+            // Расчет награды
+            let earned = userData.clickPower;
+            
+            // Премиум x2
+            if (userData.premium) earned *= 2;
+            
+            // Крит
+            if (Math.random() * 100 < userData.critChance) {
+                earned *= 3;
+                tg.HapticFeedback?.notificationOccurred('success');
+            }
+            
+            userData.balance += earned;
+            userData.totalClicks += 1;
+            userData.energy = Math.max(0, userData.energy - 1);
+            
+            updateDisplay();
+            
+            // Отправляем на сервер
+            fetch('/api/click', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    user_id: userId,
+                    earned: earned
+                })
+            }).catch(() => {});
+            
+            // Проверка на достижение новой стадии
+            const oldStage = getFatnessStage(userData.totalClicks - 1).level;
+            const newStage = getFatnessStage(userData.totalClicks).level;
+            
+            if (newStage > oldStage) {
+                tg.HapticFeedback?.notificationOccurred('success');
+                tg.showPopup({
+                    title: '🎉 Буда потолстел!',
+                    message: `Поздравляю! Буда достиг стадии: ${getFatnessStage(userData.totalClicks).name}`,
+                    buttons: [{ type: 'ok' }]
+                });
+            }
+        });
+        
+        // Покупка улучшений
+        function buyUpgrade(type) {
+            let cost = 0;
+            
+            switch(type) {
+                case 'power':
+                    cost = 100 * userData.clickPower;
+                    if (userData.balance >= cost) {
+                        userData.balance -= cost;
+                        userData.clickPower++;
+                    }
+                    break;
+                case 'energy':
+                    cost = 200;
+                    if (userData.balance >= cost) {
+                        userData.balance -= cost;
+                        userData.maxEnergy += 50;
+                        userData.energy += 50;
+                    }
+                    break;
+                case 'regen':
+                    cost = 300;
+                    if (userData.balance >= cost) {
+                        userData.balance -= cost;
+                        userData.energyRegen++;
+                    }
+                    break;
+                case 'crit':
+                    cost = 500;
+                    if (userData.balance >= cost) {
+                        userData.balance -= cost;
+                        userData.critChance += 5;
+                    }
+                    break;
+            }
+            
+            if (userData.balance >= cost) {
+                tg.HapticFeedback?.notificationOccurred('success');
+                updateDisplay();
+            } else {
+                tg.HapticFeedback?.notificationOccurred('error');
+            }
+        }
+        
+        // Копирование реферальной ссылки
+        function copyRefLink() {
+            navigator.clipboard.writeText(userData.refLink);
+            tg.HapticFeedback?.notificationOccurred('success');
+            tg.showPopup({
+                title: '✅ Скопировано!',
+                message: 'Ссылка скопирована. Отправь её друзьям и получай бонусы!',
+                buttons: [{ type: 'ok' }]
+            });
+        }
+        
+        // Автоматическая регенерация энергии
+        setInterval(() => {
+            if (userData.energy < userData.maxEnergy) {
+                userData.energy = Math.min(userData.maxEnergy, userData.energy + userData.energyRegen);
+                updateDisplay();
+            }
+        }, 1000);
+        
+        // Готово
+        tg.ready();
+    </script>
+</body>
+</html>
