@@ -102,6 +102,8 @@ async def handle_balance(message: types.Message):
             f"📈 **Всего заработано:** {earned}",
             parse_mode="Markdown"
         )
+    else:
+        await message.answer("⚠️ Ты ещё не начинал игру. Нажми 'ИГРАТЬ В БУДУ'.")
 
 # ===== КНОПКА "Рефералы" =====
 @dp.message(lambda msg: msg.text == "👥 Рефералы")
