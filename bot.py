@@ -27,7 +27,6 @@ def init_db():
             total_earned INTEGER DEFAULT 0,
             referrals INTEGER DEFAULT 0,
             referrer_id INTEGER,
-            premium BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -40,12 +39,11 @@ init_db()
 def main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎮 ИГРАТЬ В БУДУ", web_app=WebAppInfo(url=WEBAPP_URL))],
+            [KeyboardButton(text="🎮 ИГРАТЬ", web_app=WebAppInfo(url=WEBAPP_URL))],
             [KeyboardButton(text="💰 Баланс"), KeyboardButton(text="👥 Рефералы")],
-            [KeyboardButton(text="🏆 Топ"), KeyboardButton(text="💎 Премиум")]
+            [KeyboardButton(text="🏆 Топ")]
         ],
-        resize_keyboard=True,
-        input_field_placeholder="Выбери действие..."
+        resize_keyboard=True
     )
     return keyboard
 
@@ -56,7 +54,6 @@ async def cmd_start(message: types.Message):
     username = message.from_user.username
     first_name = message.from_user.first_name
 
-    # Реферальная система
     args = message.text.split()
     referrer_id = None
     if len(args) > 1 and args[1].startswith("ref_"):
@@ -69,23 +66,32 @@ async def cmd_start(message: types.Message):
 
     conn = sqlite3.connect('buda.db')
     cur = conn.cursor()
-    cur.execute('INSERT OR IGNORE INTO users (user_id, username, first_name, referrer_id) VALUES (?, ?, ?, ?)',
-                (user_id, username, first_name, referrer_id))
-    if referrer_id:
-        cur.execute('UPDATE users SET referrals = referrals + 1, balance = balance + 100 WHERE user_id = ?', (referrer_id,))
+    
+    # Создаём пользователя
+    cur.execute('''
+        INSERT OR IGNORE INTO users (user_id, username, first_name, referrer_id)
+        VALUES (?, ?, ?, ?)
+    ''', (user_id, username, first_name, referrer_id))
+    
+    # Начисляем бонус рефереру
+    if referrer_id and referrer_id != user_id:
+        cur.execute('''
+            UPDATE users 
+            SET referrals = referrals + 1, balance = balance + 100 
+            WHERE user_id = ?
+        ''', (referrer_id,))
+    
     conn.commit()
     conn.close()
 
     await message.answer(
         f"🚀 **Привет, {first_name}!**\n\n"
-        f"Это кликер **толстого друга Буды**!\n"
-        f"Тыкай по нему, смотри как он толстеет и зарабатывай монеты.\n\n"
-        f"👇 Жми кнопку внизу, чтобы начать!",
+        f"Это Буда Кликер — нажимай на фото, зарабатывай монеты и становись лучшим!",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
 
-# ===== КНОПКА "Баланс" =====
+# ===== БАЛАНС =====
 @dp.message(lambda msg: msg.text == "💰 Баланс")
 async def handle_balance(message: types.Message):
     user_id = message.from_user.id
@@ -94,18 +100,16 @@ async def handle_balance(message: types.Message):
     cur.execute('SELECT balance, total_clicks, total_earned FROM users WHERE user_id = ?', (user_id,))
     row = cur.fetchone()
     conn.close()
+    
     if row:
-        balance, clicks, earned = row
         await message.answer(
-            f"💰 **Твой баланс:** {balance} монет\n"
-            f"👆 **Всего кликов:** {clicks}\n"
-            f"📈 **Всего заработано:** {earned}",
+            f"💰 **Баланс:** {row[0]} монет\n"
+            f"👆 **Кликов:** {row[1]}\n"
+            f"📈 **Всего заработано:** {row[2]}",
             parse_mode="Markdown"
         )
-    else:
-        await message.answer("⚠️ Ты ещё не начинал игру. Нажми 'ИГРАТЬ В БУДУ'.")
 
-# ===== КНОПКА "Рефералы" =====
+# ===== РЕФЕРАЛЫ =====
 @dp.message(lambda msg: msg.text == "👥 Рефералы")
 async def handle_ref(message: types.Message):
     user_id = message.from_user.id
@@ -120,16 +124,13 @@ async def handle_ref(message: types.Message):
 
     referrals = row[0] if row else 0
     await message.answer(
-        f"👥 **Реферальная система**\n\n"
-        f"Твои рефералы: **{referrals}**\n"
-        f"• **100 монет** за каждого друга\n"
-        f"• **10%** от их покупок\n\n"
-        f"👇 **Твоя ссылка:**\n"
-        f"`{ref_link}`",
+        f"👥 **Твои рефералы:** {referrals}\n"
+        f"• +100 монет за каждого друга\n\n"
+        f"👇 **Твоя ссылка:**\n`{ref_link}`",
         parse_mode="Markdown"
     )
 
-# ===== КНОПКА "Топ" =====
+# ===== ТОП =====
 @dp.message(lambda msg: msg.text == "🏆 Топ")
 async def handle_top(message: types.Message):
     conn = sqlite3.connect('buda.db')
@@ -147,40 +148,13 @@ async def handle_top(message: types.Message):
     if not top:
         text = "🏆 Топ пока пуст. Тыкай Буду первым!"
     else:
-        text = "🏆 **Топ тыкателей Буды:**\n\n"
+        text = "🏆 **Топ игроков:**\n\n"
         for i, (name, clicks, balance) in enumerate(top, 1):
-            text += f"{i}. {name} — {clicks} тыков (💰 {balance})\n"
+            text += f"{i}. {name} — {clicks} кликов (💰 {balance})\n"
+    
     await message.answer(text, parse_mode="Markdown")
 
-# ===== КНОПКА "Премиум" =====
-@dp.message(lambda msg: msg.text == "💎 Премиум")
-async def handle_premium(message: types.Message):
-    prices = [types.LabeledPrice(label="Премиум на месяц", amount=100)]
-    await bot.send_invoice(
-        chat_id=message.from_user.id,
-        title="💎 Премиум Буда Кликер",
-        description="Премиум: x2 монет за клик, +50 энергии, уникальные скины",
-        payload="premium_month",
-        provider_token="",
-        currency="XTR",
-        prices=prices
-    )
-
-@dp.pre_checkout_query()
-async def pre_checkout_handler(pre_checkout: types.PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout.id, ok=True)
-
-@dp.message(lambda message: message.successful_payment is not None)
-async def payment_handler(message: types.Message):
-    user_id = message.from_user.id
-    conn = sqlite3.connect('buda.db')
-    cur = conn.cursor()
-    cur.execute('UPDATE users SET premium = TRUE WHERE user_id = ?', (user_id,))
-    conn.commit()
-    conn.close()
-    await message.answer("💎 **Ты теперь Премиум-тыкатель!**", parse_mode="Markdown")
-
-# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ MINI APP =====
+# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ ИГРЫ =====
 @dp.message(lambda message: message.web_app_data is not None)
 async def web_app_data_handler(message: types.Message):
     user_id = message.from_user.id
@@ -190,20 +164,11 @@ async def web_app_data_handler(message: types.Message):
     conn = sqlite3.connect('buda.db')
     cur = conn.cursor()
 
-    if action == 'click':
+    if action in ['click', 'sync']:
         balance = data.get('balance')
         total_clicks = data.get('totalClicks')
         total_earned = data.get('totalEarned')
-        cur.execute('''
-            UPDATE users 
-            SET balance = ?, total_clicks = ?, total_earned = ? 
-            WHERE user_id = ?
-        ''', (balance, total_clicks, total_earned, user_id))
-
-    elif action == 'sync':
-        balance = data.get('balance')
-        total_clicks = data.get('totalClicks')
-        total_earned = data.get('totalEarned')
+        
         cur.execute('''
             UPDATE users 
             SET balance = ?, total_clicks = ?, total_earned = ? 
