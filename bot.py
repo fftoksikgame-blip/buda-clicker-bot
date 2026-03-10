@@ -4,7 +4,7 @@ import json
 import sqlite3
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from database import init_db, get_user, update_user, add_purchase, get_top_users
 
 BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"
@@ -16,23 +16,29 @@ dp = Dispatcher()
 
 init_db()
 
+# Промокоды (в реальном проекте лучше хранить в БД)
+VALID_PROMOS = {
+    "BUDAPROMO": 500,
+    "BUDA100": 100,
+    "STARTER": 50
+}
+
 def get_fatness_stage(clicks):
     if clicks >= 1_000_000:
-        return {"name": "🌍 Буда-планета", "level": 7}
+        return "🌍 Буда-планета"
     elif clicks >= 500_000:
-        return {"name": "🛢️ Буда-бочка", "level": 6}
+        return "🛢️ Буда-бочка"
     elif clicks >= 100_000:
-        return {"name": "🐷 Буда-телепузик", "level": 5}
+        return "🐷 Буда-телепузик"
     elif clicks >= 10_000:
-        return {"name": "⚪ Буда-колобок", "level": 4}
+        return "⚪ Буда-колобок"
     elif clicks >= 1_000:
-        return {"name": "🥟 Буда-пухлик", "level": 3}
+        return "🥟 Буда-пухлик"
     elif clicks >= 100:
-        return {"name": "🍩 Буда-пончик", "level": 2}
+        return "🍩 Буда-пончик"
     else:
-        return {"name": "😤 Буда-спичка", "level": 1}
+        return "😤 Буда-спичка"
 
-# Главная клавиатура (ReplyKeyboardMarkup — для передачи данных!)
 def main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -70,7 +76,7 @@ async def cmd_start(message: types.Message):
         f"📊 **Твоя статистика:**\n"
         f"💰 Баланс: {user['balance']} монет\n"
         f"👆 Кликов: {user['total_clicks']}\n"
-        f"🍔 Стадия: {fatness['name']}\n"
+        f"🍔 Стадия: {fatness}\n"
         f"👥 Рефералов: {user['referrals']}",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
@@ -83,7 +89,7 @@ async def handle_balance(message: types.Message):
     await message.answer(
         f"💰 **Твой баланс:** {user['balance']} монет\n"
         f"👆 **Кликов:** {user['total_clicks']}\n"
-        f"🍔 **Буда:** {fatness['name']}",
+        f"🍔 **Буда:** {fatness}",
         parse_mode="Markdown"
     )
 
@@ -110,7 +116,7 @@ async def handle_top(message: types.Message):
         text = "🏆 **Топ тыкателей:**\n\n"
         for i, (name, clicks, balance) in enumerate(top_users, 1):
             fatness = get_fatness_stage(clicks)
-            text += f"{i}. {name} — {clicks} {fatness['name']} (💰 {balance})\n"
+            text += f"{i}. {name} — {clicks} {fatness} (💰 {balance})\n"
     await message.answer(text, parse_mode="Markdown")
 
 @dp.message(lambda msg: msg.text == "💎 Премиум")
@@ -150,34 +156,50 @@ async def web_app_data_handler(message: types.Message):
     user_id = message.from_user.id
     data = json.loads(message.web_app_data.data)
     action = data.get('action')
-    earned = data.get('earned', 0)
-    total_clicks = data.get('totalClicks')
-    balance = data.get('balance')
 
     conn = sqlite3.connect('buda.db')
     cur = conn.cursor()
 
     if action == 'click':
+        earned = data.get('earned', 0)
+        total_clicks = data.get('totalClicks')
+        total_earned = data.get('totalEarned')
+        crit_count = data.get('critCount')
+
         cur.execute('''
             UPDATE users 
-            SET total_clicks = total_clicks + 1, balance = balance + ? 
+            SET total_clicks = ?, balance = balance + ?, total_earned = ?, crit_count = ?
             WHERE user_id = ?
-        ''', (earned, user_id))
+        ''', (total_clicks, earned, total_earned, crit_count, user_id))
         conn.commit()
 
     elif action == 'sync':
-        if total_clicks is not None and balance is not None:
-            cur.execute('''
-                UPDATE users 
-                SET total_clicks = ?, balance = ? 
-                WHERE user_id = ?
-            ''', (total_clicks, balance, user_id))
-            conn.commit()
+        total_clicks = data.get('totalClicks')
+        balance = data.get('balance')
+        total_earned = data.get('totalEarned')
+        crit_count = data.get('critCount')
+
+        cur.execute('''
+            UPDATE users 
+            SET total_clicks = ?, balance = ?, total_earned = ?, crit_count = ?
+            WHERE user_id = ?
+        ''', (total_clicks, balance, total_earned, crit_count, user_id))
+        conn.commit()
 
     elif action == 'upgrade':
-        if balance is not None:
-            cur.execute('UPDATE users SET balance = ? WHERE user_id = ?', (balance, user_id))
+        balance = data.get('balance')
+        cur.execute('UPDATE users SET balance = ? WHERE user_id = ?', (balance, user_id))
+        conn.commit()
+
+    elif action == 'promo':
+        code = data.get('code')
+        if code in VALID_PROMOS:
+            bonus = VALID_PROMOS[code]
+            cur.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (bonus, user_id))
             conn.commit()
+            await message.answer(f"✅ Промокод активирован! Ты получил {bonus} монет.")
+        else:
+            await message.answer("❌ Неверный промокод.")
 
     conn.close()
 
