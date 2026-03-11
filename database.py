@@ -124,3 +124,9 @@ def get_top_users(limit=10):
     top = cur.fetchall()
     conn.close()
     return top
+    {
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}
