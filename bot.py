@@ -1,35 +1,44 @@
 import asyncio
 import logging
 import json
+import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, db
 
-BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"
-WEBAPP_URL = "https://fftoksikgame-blip.github.io/buda-clicker-app/"
-ADMIN_ID = 2048960464
+load_dotenv()  # загружаем переменные из .env
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBAPP_URL = os.getenv("WEBAPP_URL")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 2048960464))  # твой ID по умолчанию
+
+if not BOT_TOKEN or not WEBAPP_URL:
+    raise Exception("❌ BOT_TOKEN или WEBAPP_URL не заданы в .env")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ===== ВСТАВЬ СВОЙ НОВЫЙ JSON-КЛЮЧ (ОДНОЙ СТРОКОЙ) =====
-FIREBASE_CONFIG_JSON = '{"type": "service_account", "project_id": "buda-clicker", "private_key_id": "...", "private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n", "client_email": "...", "client_id": "...", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "...", "universe_domain": "googleapis.com"}'
-# ==========================================================
+# ===== FIREBASE =====
+firebase_config_json = os.getenv("FIREBASE_CONFIG")
+if not firebase_config_json:
+    raise Exception("❌ Переменная окружения FIREBASE_CONFIG не найдена! Добавь её в .env")
 
-config_dict = json.loads(FIREBASE_CONFIG_JSON)
+config_dict = json.loads(firebase_config_json)
 cred = credentials.Certificate(config_dict)
 firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://buda-clicker-default-rtdb.europe-west1.firebasedatabase.app/'  # проверь свой URL
+    'databaseURL': os.getenv("FIREBASE_DATABASE_URL")  # тоже из .env
 })
 db_ref = db.reference('/')
 users_ref = db_ref.child('users')
 promos_ref = db_ref.child('promocodes')
 logs_ref = db_ref.child('logs')
 
+# ===== КЛАВИАТУРА =====
 def main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -41,6 +50,7 @@ def main_keyboard():
     )
     return keyboard
 
+# ===== КОМАНДА /START =====
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_id = str(message.from_user.id)
@@ -86,6 +96,7 @@ async def cmd_start(message: types.Message):
         parse_mode="Markdown"
     )
 
+# ===== БАЛАНС =====
 @dp.message(lambda msg: msg.text == "💰 Баланс")
 async def handle_balance(message: types.Message):
     user_id = str(message.from_user.id)
@@ -101,6 +112,7 @@ async def handle_balance(message: types.Message):
     else:
         await message.answer("❌ Данные не найдены. Нажми /start")
 
+# ===== РЕФЕРАЛЫ =====
 @dp.message(lambda msg: msg.text == "👥 Рефералы")
 async def handle_ref(message: types.Message):
     user_id = str(message.from_user.id)
@@ -115,6 +127,7 @@ async def handle_ref(message: types.Message):
         parse_mode="Markdown"
     )
 
+# ===== ТОП =====
 @dp.message(lambda msg: msg.text == "🏆 Топ")
 async def handle_top(message: types.Message):
     users_snapshot = users_ref.order_by_child('clicks').limit_to_last(10).get()
@@ -136,6 +149,7 @@ async def handle_top(message: types.Message):
         text += f"{i}. {player['name']} — {player['clicks']} кликов (💰 {player['balance']})\n"
     await message.answer(text, parse_mode="Markdown")
 
+# ===== ПРЕМИУМ =====
 @dp.message(lambda msg: msg.text == "💎 Премиум")
 async def handle_premium(message: types.Message):
     prices = [types.LabeledPrice(label="Премиум на месяц", amount=100)]
@@ -305,6 +319,7 @@ async def cmd_user(message: types.Message):
         parse_mode="Markdown"
     )
 
+# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ ИГРЫ =====
 @dp.message(lambda message: message.web_app_data is not None)
 async def web_app_data_handler(message: types.Message):
     user_id = str(message.from_user.id)
