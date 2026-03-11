@@ -1,42 +1,33 @@
 import asyncio
 import logging
 import json
-import os
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
-from dotenv import load_dotenv
 import firebase_admin
 from firebase_admin import credentials, db
 
-load_dotenv()  # загружаем переменные из .env
+# ===== ТВОИ ДАННЫЕ (ЗАМЕНИ НА СВОИ) =====
+BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"
+WEBAPP_URL = "https://fftoksikgame-blip.github.io/buda-clicker-app/"
+ADMIN_ID = 2048960464  # твой Telegram ID
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-WEBAPP_URL = os.getenv("WEBAPP_URL")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 2048960464))  # твой ID по умолчанию
+# ===== FIREBASE (ВСТАВЬ СВОЙ КЛЮЧ) =====
+FIREBASE_CONFIG_JSON = '{"type": "service_account", "project_id": "buda-clicker", "private_key_id": "...", "private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n", "client_email": "...", "client_id": "...", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "...", "universe_domain": "googleapis.com"}'
+FIREBASE_DATABASE_URL = "https://buda-clicker-default-rtdb.europe-west1.firebasedatabase.app/"  # твой URL
 
-if not BOT_TOKEN or not WEBAPP_URL:
-    raise Exception("❌ BOT_TOKEN или WEBAPP_URL не заданы в .env")
-
+# ===== ИНИЦИАЛИЗАЦИЯ =====
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ===== FIREBASE =====
-firebase_config_json = os.getenv("FIREBASE_CONFIG")
-if not firebase_config_json:
-    raise Exception("❌ Переменная окружения FIREBASE_CONFIG не найдена! Добавь её в .env")
-
-config_dict = json.loads(firebase_config_json)
-cred = credentials.Certificate(config_dict)
-firebase_admin.initialize_app(cred, {
-    'databaseURL': os.getenv("FIREBASE_DATABASE_URL")  # тоже из .env
-})
+# Firebase
+cred = credentials.Certificate(json.loads(FIREBASE_CONFIG_JSON))
+firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
 db_ref = db.reference('/')
 users_ref = db_ref.child('users')
-promos_ref = db_ref.child('promocodes')
-logs_ref = db_ref.child('logs')
+logs_ref = db_ref.child('logs')  # для логов действий
 
 # ===== КЛАВИАТУРА =====
 def main_keyboard():
@@ -75,6 +66,7 @@ async def cmd_start(message: types.Message):
             'timestamp': datetime.now().isoformat()
         })
 
+    # Реферальная система
     args = message.text.split()
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
@@ -91,7 +83,7 @@ async def cmd_start(message: types.Message):
 
     await message.answer(
         f"🚀 **Привет, {first_name}!**\n\n"
-        f"Это Буда Кликер 2.0 — жми кнопку внизу, чтобы начать.",
+        f"Это Буда Кликер — жми кнопку внизу, чтобы начать.",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
@@ -149,14 +141,14 @@ async def handle_top(message: types.Message):
         text += f"{i}. {player['name']} — {player['clicks']} кликов (💰 {player['balance']})\n"
     await message.answer(text, parse_mode="Markdown")
 
-# ===== ПРЕМИУМ =====
+# ===== ПРЕМИУМ (ЗВЁЗДЫ) =====
 @dp.message(lambda msg: msg.text == "💎 Премиум")
 async def handle_premium(message: types.Message):
     prices = [types.LabeledPrice(label="Премиум на месяц", amount=100)]
     await bot.send_invoice(
         chat_id=message.from_user.id,
         title="💎 Премиум Буда Кликер",
-        description="Премиум: x2 монет, +50 энергии, автокликер",
+        description="Премиум: x2 монет, +50 энергии",
         payload="premium_month",
         provider_token="",
         currency="XTR",
@@ -176,9 +168,9 @@ async def payment_handler(message: types.Message):
         'action': 'premium_purchased',
         'timestamp': datetime.now().isoformat()
     })
-    await message.answer("💎 **Ты теперь Премиум-тыкатель! Автокликер активирован.**", parse_mode="Markdown")
+    await message.answer("💎 **Ты теперь Премиум-тыкатель!**", parse_mode="Markdown")
 
-# ===== АДМИН-ПАНЕЛЬ =====
+# ===== АДМИН-ПАНЕЛЬ (только для ADMIN_ID) =====
 def is_admin(user_id):
     return user_id == ADMIN_ID
 
@@ -190,11 +182,10 @@ async def cmd_admin(message: types.Message):
         "🔐 **Админ-панель**\n\n"
         "Команды:\n"
         "/givecoins ID сумма — выдать монеты\n"
-        "/giveenergy ID количество — установить энергию\n"
         "/setpremium ID — выдать премиум\n"
-        "/createpromo код сумма [лимит] — создать промокод\n"
         "/stats — статистика пользователей\n"
-        "/user ID — информация о пользователе"
+        "/user ID — информация о пользователе\n"
+        "/logs — последние действия"
     )
     await message.answer(text, parse_mode="Markdown")
 
@@ -221,22 +212,6 @@ async def cmd_givecoins(message: types.Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
-@dp.message(Command("giveenergy"))
-async def cmd_giveenergy(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    args = message.text.split()
-    if len(args) < 3:
-        await message.answer("Использование: /giveenergy ID количество")
-        return
-    try:
-        target_id = args[1]
-        energy = int(args[2])
-        users_ref.child(target_id).update({'admin_energy': energy})
-        await message.answer(f"✅ Энергия пользователя {target_id} установлена на {energy} (будет применена при следующем заходе).")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка: {e}")
-
 @dp.message(Command("setpremium"))
 async def cmd_setpremium(message: types.Message):
     if not is_admin(message.from_user.id):
@@ -254,25 +229,6 @@ async def cmd_setpremium(message: types.Message):
         'timestamp': datetime.now().isoformat()
     })
     await message.answer(f"✅ Пользователь {target_id} теперь премиум.")
-
-@dp.message(Command("createpromo"))
-async def cmd_createpromo(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    args = message.text.split()
-    if len(args) < 3:
-        await message.answer("Использование: /createpromo код сумма [лимит]")
-        return
-    code = args[1].upper()
-    amount = int(args[2])
-    limit = int(args[3]) if len(args) > 3 else 1
-    promos_ref.child(code).set({
-        'amount': amount,
-        'limit': limit,
-        'used': 0,
-        'created': datetime.now().isoformat()
-    })
-    await message.answer(f"✅ Промокод {code} создан на {amount} монет, лимит {limit} использований.")
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
@@ -319,6 +275,19 @@ async def cmd_user(message: types.Message):
         parse_mode="Markdown"
     )
 
+@dp.message(Command("logs"))
+async def cmd_logs(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+    logs_snapshot = logs_ref.order_by_key().limit_to_last(10).get()
+    if not logs_snapshot:
+        await message.answer("Логов пока нет.")
+        return
+    text = "📋 **Последние действия:**\n\n"
+    for key, log in sorted(logs_snapshot.items(), reverse=True)[:10]:
+        text += f"• {log.get('action')} от {log.get('userId')} [{log.get('timestamp')}]\n"
+    await message.answer(text, parse_mode="Markdown")
+
 # ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ ИГРЫ =====
 @dp.message(lambda message: message.web_app_data is not None)
 async def web_app_data_handler(message: types.Message):
@@ -327,7 +296,7 @@ async def web_app_data_handler(message: types.Message):
     action = data.get('action')
     user_ref = users_ref.child(user_id)
 
-    if action in ['click', 'auto_click', 'sync']:
+    if action in ['click', 'sync']:
         balance = data.get('balance')
         total_clicks = data.get('totalClicks')
         total_earned = data.get('totalEarned')
