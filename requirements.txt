@@ -1,3 +1,2 @@
-aiogram
-firebase-admin
-python-dotenv
+aiogram==2.25.1
+firebase-admin==6.2.0
