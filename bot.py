@@ -8,25 +8,31 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 import firebase_admin
 from firebase_admin import credentials, db
 
-# ===== ТВОИ ДАННЫЕ =====
+# ===== ТВОИ ДАННЫЕ (ЗАМЕНИ НА СВОИ) =====
 BOT_TOKEN = "8116737200:AAGoOIBsT_89PIL1Yhz3Jikr7NwMdtrMAQY"
 WEBAPP_URL = "https://fftoksikgame-blip.github.io/buda-clicker-app/"
-ADMIN_ID = 2048960464  # твой ID (проверь, точно твой?)
+ADMIN_ID = 2048960464  # твой Telegram ID
 
-# ===== FIREBASE =====
+# ===== FIREBASE (ВСТАВЬ СВОЙ КЛЮЧ И URL) =====
 FIREBASE_CONFIG_JSON = '{"type": "service_account", "project_id": "buda-clicker", "private_key_id": "...", "private_key": "-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n", "client_email": "...", "client_id": "...", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "...", "universe_domain": "googleapis.com"}'
-FIREBASE_DATABASE_URL = "https://buda-clicker-default-rtdb.europe-west1.firebasedatabase.app/"
+FIREBASE_DATABASE_URL = "https://buda-clicker-default-rtdb.europe-west1.firebasedatabase.app/"  # твой URL
 
+# ===== ИНИЦИАЛИЗАЦИЯ =====
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# Инициализация Firebase
-cred = credentials.Certificate(json.loads(FIREBASE_CONFIG_JSON))
-firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
-db_ref = db.reference('/')
-users_ref = db_ref.child('users')
-logs_ref = db_ref.child('logs')
+# Firebase
+try:
+    cred = credentials.Certificate(json.loads(FIREBASE_CONFIG_JSON))
+    firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DATABASE_URL})
+    db_ref = db.reference('/')
+    users_ref = db_ref.child('users')
+    logs_ref = db_ref.child('logs')
+    logging.info("✅ Firebase подключен")
+except Exception as e:
+    logging.error(f"❌ Ошибка подключения Firebase: {e}")
+    raise
 
 # ===== КЛАВИАТУРА =====
 def main_keyboard():
@@ -50,6 +56,7 @@ async def cmd_start(message: types.Message):
     user_ref = users_ref.child(user_id)
     user_data = user_ref.get()
     if not user_data:
+        # Новый пользователь
         user_ref.set({
             'name': first_name,
             'username': username,
@@ -64,13 +71,14 @@ async def cmd_start(message: types.Message):
             'action': 'first_start',
             'timestamp': datetime.now().isoformat()
         })
-        logging.info(f"Новый пользователь: {user_id} {first_name}")
 
+    # Реферальная система
     args = message.text.split()
     if len(args) > 1 and args[1].startswith("ref_"):
         referrer_id = args[1].replace("ref_", "")
         if referrer_id != user_id:
             referrer_ref = users_ref.child(referrer_id)
+            # Увеличиваем счетчик рефералов и баланс реферера
             referrer_ref.child('referrals').transaction(lambda current: (current or 0) + 1)
             referrer_ref.child('balance').transaction(lambda current: (current or 0) + 100)
             logs_ref.push({
@@ -79,7 +87,6 @@ async def cmd_start(message: types.Message):
                 'from': user_id,
                 'timestamp': datetime.now().isoformat()
             })
-            logging.info(f"Реферальный бонус: {referrer_id} от {user_id}")
 
     await message.answer(
         f"🚀 **Привет, {first_name}!**\n\n"
@@ -122,7 +129,7 @@ async def handle_ref(message: types.Message):
 # ===== ТОП =====
 @dp.message(lambda msg: msg.text == "🏆 Топ")
 async def handle_top(message: types.Message):
-    users_snapshot = users_ref.order_by_child('clicks').limit_to_last(20).get()
+    users_snapshot = users_ref.order_by_child('clicks').limit_to_last(10).get()
     if not users_snapshot:
         await message.answer("🏆 Топ пока пуст. Тыкай Буду первым!")
         return
@@ -136,12 +143,11 @@ async def handle_top(message: types.Message):
                 'balance': data.get('balance', 0)
             })
     top_list.sort(key=lambda x: x['clicks'], reverse=True)
-    top_list = top_list[:10]
     if not top_list:
         await message.answer("🏆 Топ пока пуст. Тыкай Буду первым!")
         return
     text = "🏆 **Топ игроков:**\n\n"
-    for i, player in enumerate(top_list, 1):
+    for i, player in enumerate(top_list[:10], 1):
         text += f"{i}. {player['name']} — {player['clicks']} кликов (💰 {player['balance']})\n"
     await message.answer(text, parse_mode="Markdown")
 
@@ -174,9 +180,9 @@ async def payment_handler(message: types.Message):
     })
     await message.answer("💎 **Ты теперь Премиум-тыкатель!**", parse_mode="Markdown")
 
-# ===== АДМИН-ПАНЕЛЬ =====
+# ===== АДМИН-ПАНЕЛЬ (только для ADMIN_ID) =====
 def is_admin(user_id):
-    return int(user_id) == ADMIN_ID
+    return user_id == ADMIN_ID
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message):
@@ -204,6 +210,7 @@ async def cmd_givecoins(message: types.Message):
     try:
         target_id = args[1]
         amount = int(args[2])
+        # Добавляем монеты через транзакцию
         users_ref.child(target_id).child('balance').transaction(lambda current: (current or 0) + amount)
         logs_ref.push({
             'adminId': message.from_user.id,
@@ -213,7 +220,6 @@ async def cmd_givecoins(message: types.Message):
             'timestamp': datetime.now().isoformat()
         })
         await message.answer(f"✅ Пользователю {target_id} выдано {amount} монет.")
-        logging.info(f"Админ {message.from_user.id} выдал {amount} монет пользователю {target_id}")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {e}")
 
@@ -284,47 +290,45 @@ async def cmd_user(message: types.Message):
 async def cmd_logs(message: types.Message):
     if not is_admin(message.from_user.id):
         return
-    logs_snapshot = logs_ref.order_by_key().limit_to_last(15).get()
+    logs_snapshot = logs_ref.order_by_key().limit_to_last(10).get()
     if not logs_snapshot:
         await message.answer("Логов пока нет.")
         return
     text = "📋 **Последние действия:**\n\n"
-    # сортируем по ключу (времени) обратно
-    items = sorted(logs_snapshot.items(), key=lambda x: x[0], reverse=True)
-    for key, log in items[:10]:
+    # Сортируем по убыванию ключа (чем больше ключ, тем новее запись)
+    for key, log in sorted(logs_snapshot.items(), reverse=True)[:10]:
         text += f"• {log.get('action')} от {log.get('userId')} [{log.get('timestamp')}]\n"
     await message.answer(text, parse_mode="Markdown")
 
-# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ ИГРЫ =====
+# ===== ПОЛУЧЕНИЕ ДАННЫХ ИЗ ИГРЫ (КЛИКИ) =====
 @dp.message(lambda message: message.web_app_data is not None)
 async def web_app_data_handler(message: types.Message):
     user_id = str(message.from_user.id)
     try:
         data = json.loads(message.web_app_data.data)
         action = data.get('action')
-        logging.info(f"Получены данные от {user_id}: {data}")
+        logging.info(f"📦 Получены данные от {user_id}: action={action}")
 
         user_ref = users_ref.child(user_id)
-        # Обновляем только если есть необходимые поля
+
         if action in ['click', 'sync']:
             balance = data.get('balance')
             total_clicks = data.get('totalClicks')
             total_earned = data.get('totalEarned')
-            if balance is not None and total_clicks is not None and total_earned is not None:
-                user_ref.update({
-                    'balance': balance,
-                    'clicks': total_clicks,
-                    'earned': total_earned
-                })
-                logging.info(f"Обновлены данные пользователя {user_id}: клики={total_clicks}, баланс={balance}")
-            else:
-                logging.warning(f"Неполные данные от {user_id}: {data}")
+            # Обновляем все поля
+            user_ref.update({
+                'balance': balance,
+                'clicks': total_clicks,
+                'earned': total_earned
+            })
+            logging.info(f"✅ Обновлены данные {user_id}: клики={total_clicks}, баланс={balance}")
         elif action == 'upgrade':
             balance = data.get('balance')
-            if balance is not None:
-                user_ref.update({'balance': balance})
+            user_ref.update({'balance': balance})
+            logging.info(f"✅ Обновлён баланс {user_id} после улучшения: {balance}")
+
     except Exception as e:
-        logging.error(f"Ошибка обработки web_app_data: {e}")
+        logging.error(f"❌ Ошибка обработки данных от {user_id}: {e}")
 
 async def main():
     await dp.start_polling(bot)
